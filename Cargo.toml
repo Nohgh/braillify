@@ -1,5 +1,5 @@
 [workspace]
-members = ["libs/*", "packages/*"]
+members = ["libs/*", "packages/*","apps/mobile/braillify-demo-app/src-tauri"]
 resolver = "3"
 
 [workspace.package]
