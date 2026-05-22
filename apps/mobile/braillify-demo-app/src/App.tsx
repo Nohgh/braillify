@@ -1,39 +1,31 @@
-import { useState } from "react";
 import "./App.css";
-import { translate } from "./shared/api/braillify";
+import { EditorPage } from "./components/Editor";
+import { TranslatePage } from "./components/Translate";
+import { HistoryPage } from "./components/History";
+import { Footer } from "./components/Footer";
+import { TabProvider, useTab } from "./context/useTab.tsx";
 
-function App() {
-  const [input, setInput] = useState("");
-  const [output, setOutput] = useState("");
-
-  const handleTranslate = () => {
-    try {
-      setOutput(translate(input));
-    } catch (e) {
-      setOutput(`오류: ${e}`);
-    }
-  };
+function AppContent() {
+  const { tab } = useTab();
 
   return (
-    <main className="container">
-      <div style={{ padding: 24 }}>
-        <h1>점자 변환기</h1>
-
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="변환할 텍스트 입력"
-          rows={4}
-          style={{ width: "100%", fontSize: 16 }}
-        />
-
-        <button onClick={handleTranslate} style={{ marginTop: 8, padding: "8px 16px" }}>
-          점역하기
-        </button>
-
-        {output && <div style={{ marginTop: 16, fontSize: 32, letterSpacing: 4 }}>{output}</div>}
+    <main className="app-layout">
+      <div className="app-content">
+        {tab === "translate" && <TranslatePage />}
+        {tab === "editor" && <EditorPage />}
+        {tab === "history" && <HistoryPage />}
       </div>
+
+      <Footer />
     </main>
+  );
+}
+
+function App() {
+  return (
+    <TabProvider>
+      <AppContent />
+    </TabProvider>
   );
 }
 
