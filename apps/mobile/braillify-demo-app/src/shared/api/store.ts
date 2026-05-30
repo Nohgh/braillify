@@ -1,5 +1,3 @@
-import { isTauri } from "@tauri-apps/api/core";
-
 export type HistoryItem = {
   id: string;
   input: string;
@@ -8,81 +6,81 @@ export type HistoryItem = {
   favorite: boolean;
 };
 
-const STORAGE_KEY = "braillify_history";
+// Storage Strategy Interface
+interface HistoryStorage {
+  get(): Promise<HistoryItem[]>;
+  set(history: HistoryItem[]): Promise<void>;
+}
 
-function getLocalHistory(): HistoryItem[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
-  } catch {
-    return [];
+class WebHistoryStorage implements HistoryStorage {
+  private readonly key = "braillify_history";
+
+  async get(): Promise<HistoryItem[]> {
+    try {
+      return JSON.parse(localStorage.getItem(this.key) ?? "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  async set(history: HistoryItem[]): Promise<void> {
+    localStorage.setItem(this.key, JSON.stringify(history));
   }
 }
 
-function setLocalHistory(history: HistoryItem[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+class AppHistoryStorage implements HistoryStorage {
+  private store: import("@tauri-apps/plugin-store").LazyStore;
+
+  constructor(store: import("@tauri-apps/plugin-store").LazyStore) {
+    this.store = store;
+  }
+
+  async get(): Promise<HistoryItem[]> {
+    return (await this.store.get<HistoryItem[]>("history")) ?? [];
+  }
+
+  async set(history: HistoryItem[]): Promise<void> {
+    await this.store.set("history", history);
+    await this.store.save();
+  }
 }
 
-async function getTauriStore() {
-  const { LazyStore } = await import("@tauri-apps/plugin-store");
-  return new LazyStore("app.json");
+async function createStorage(): Promise<HistoryStorage> {
+  const { isTauri } = await import("@tauri-apps/api/core");
+  if (await isTauri()) {
+    const { LazyStore } = await import("@tauri-apps/plugin-store");
+    return new AppHistoryStorage(new LazyStore("app.json"));
+  }
+  return new WebHistoryStorage();
+}
+
+const storagePromise: Promise<HistoryStorage> = createStorage();
+
+async function getStorage(): Promise<HistoryStorage> {
+  return storagePromise;
 }
 
 export async function getHistory(): Promise<HistoryItem[]> {
-  if (await isTauri()) {
-    const store = await getTauriStore();
-    return (await store.get<HistoryItem[]>("history")) ?? [];
-  }
-  return getLocalHistory();
+  return (await getStorage()).get();
 }
 
 export async function addHistory(input: string, output: string): Promise<void> {
-  const newItem: HistoryItem = {
-    id: crypto.randomUUID(),
-    input,
-    output,
-    createAt: Date.now(),
-    favorite: false,
-  };
-
-  if (await isTauri()) {
-    const store = await getTauriStore();
-    const history = (await store.get<HistoryItem[]>("history")) ?? [];
-    await store.set("history", [newItem, ...history]);
-    await store.save();
-    return;
-  }
-
-  setLocalHistory([newItem, ...getLocalHistory()]);
+  const storage = await getStorage();
+  const history = await storage.get();
+  await storage.set([
+    { id: crypto.randomUUID(), input, output, createAt: Date.now(), favorite: false },
+    ...history,
+  ]);
 }
 
 export async function removeHistory(id: string): Promise<void> {
-  if (await isTauri()) {
-    const store = await getTauriStore();
-    const history = (await store.get<HistoryItem[]>("history")) ?? [];
-    await store.set(
-      "history",
-      history.filter(it => it.id !== id),
-    );
-    await store.save();
-    return;
-  }
-
-  setLocalHistory(getLocalHistory().filter(it => it.id !== id));
+  const storage = await getStorage();
+  const history = await storage.get();
+  await storage.set(history.filter(it => it.id !== id));
 }
 
 export async function toggleFavorite(id: string): Promise<void> {
-  if (await isTauri()) {
-    const store = await getTauriStore();
-    const history = (await store.get<HistoryItem[]>("history")) ?? [];
-    await store.set(
-      "history",
-      history.map(it => (it.id === id ? { ...it, favorite: !it.favorite } : it)),
-    );
-    await store.save();
-    return;
-  }
-
-  setLocalHistory(
-    getLocalHistory().map(it => (it.id === id ? { ...it, favorite: !it.favorite } : it)),
-  );
+  const storage = await getStorage();
+  const history = await storage.get();
+  await storage.set(history.map(it => (it.id === id ? { ...it, favorite: !it.favorite } : it)));
 }
